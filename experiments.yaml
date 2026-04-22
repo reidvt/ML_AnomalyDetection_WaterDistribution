@@ -1,0 +1,142 @@
+# experiments.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Define all training experiments here. run_experiments.py reads this file
+# and launches each experiment on its assigned GPU.
+#
+# HYPERPARAMETER INTERACTION GUIDE
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# pos_weight   Controls the recall / precision tradeoff in BCEWithLogitsLoss.
+#              Higher value → model penalises missed leaks more → higher recall,
+#              lower precision, more false alarms.
+#              Lower value → model penalises false alarms more → higher precision,
+#              lower recall, more missed leaks.
+#              Typical range: 3–20 for ~5% leak prevalence.
+#
+# lr           Learning rate. The interaction with batch_size is critical:
+#              RULE: if you double batch_size, halve lr (or use sqrt scaling).
+#              With LSTM + GNN the safe range is 1e-4 to 5e-4 at batch=256.
+#              At batch=1024, safe lr is ~2.5e-4. At batch=512 it's ~5e-4.
+#              pos_weight also amplifies the effective gradient on leak samples.
+#              Combined effect: (lr × pos_weight) should stay below ~5e-3.
+#
+# batch_size   Larger = more stable gradients (lower variance) but higher
+#              effective gradient magnitude per step. Requires lr reduction.
+#              512–1024 batches are fine ONLY if lr is reduced proportionally.
+#              At batch=1024, lr=1e-3 caused gradient explosion at epoch 51.
+#              Recommended: batch=256, lr=3e-4 (proven stable combination).
+#
+# grad_clip    Ceiling on gradient L2-norm before optimizer step.
+#              0.5 is more conservative than 1.0 (previous default).
+#              Lower values prevent explosion but slow convergence slightly.
+#              Should be tightened when pos_weight or lr is higher.
+#
+# patience     Epochs with no val F1 improvement before early stop.
+#              Set relative to epoch duration: 15 at ~20 min/epoch = ~5h max wait.
+#              With fast experiments (epoch < 5 min) use 20-25.
+#
+# lstm_hidden  LSTM hidden state width. 64 is the current default.
+#              Increasing to 128 doubles parameter count but may improve
+#              temporal feature quality. Requires more VRAM.
+#
+# embedding_dim Width of the LSTM→GNN bottleneck. Currently 32.
+#               Must match gnn_hidden in the GINEConv first layer.
+#               Increasing reduces information compression but raises cost.
+#
+# STABILITY RULE OF THUMB
+#   lr × pos_weight × (batch_size / 256) < 5e-3
+#   e.g. lr=3e-4, pw=10, batch=256  → 3e-4 × 10 × 1 = 3e-3  ✓ safe
+#        lr=1e-3, pw=10, batch=1024 → 1e-3 × 10 × 4 = 4e-2  ✗ explosion (epoch 51)
+#        lr=1e-3, pw=5,  batch=512  → 1e-3 × 5  × 2 = 1e-2  ✗ explosion (epoch 4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Paths shared by all experiments ──────────────────────────────────────────
+shared:
+  data_root:           "/media/ailab/LandslideJH/LeakDB/LeakDB/data_master"
+  output_base:         "/media/ailab/LandslideJH/LeakDB/LeakDB/outputs"
+  inp_file:            null          # set to .inp path if available
+  window_size:         48
+  stride:              24
+  use_pressure:        true
+  use_demand:          false
+  use_flows:           true
+  val_split:           0.15
+  test_split:          0.15
+  dataset_cache_size:  128
+  num_workers:         12
+  seed:                42
+  checkpoint_every:    5
+
+# ── Individual experiments ────────────────────────────────────────────────────
+# Each entry runs as a separate process on its assigned GPU.
+# Max 2 experiments simultaneously (one per GPU).
+#
+# Stability check:  lr × pos_weight × (batch_size / 256) must be < 5e-3
+experiments:
+
+  # ── Experiment A: High-recall baseline ─────────────────────────────────────
+  # pos_weight=10 pushes recall as high as possible.
+  # Builds on pw10 run: best_model.pth epoch 46 F1=0.7251 already exists.
+  # Resuming from checkpoint_latest.pth to continue from epoch 51.
+  - name:         "pw10_stable"
+    gpu:          1                  # GPU 1 is clean (no competing jobs)
+    resume:       true               # resume from checkpoint_latest.pth
+    pos_weight:   10.0
+    lr:           0.0003             # reduced from 1e-3 (was causing ep51 NaN)
+    batch_size:   256                # safe reference batch size
+    grad_clip:    0.5                # tighter than previous 1.0
+    epochs:       150
+    patience:     15
+    lstm_hidden:  64
+    embedding_dim: 32
+    gnn_hidden:   64
+    gnn_layers:   2
+    gnn_dropout:  0.2
+    lstm_dropout: 0.2
+    # Stability check: 3e-4 × 10 × (256/256) = 3e-3  ✓
+
+  # ── Experiment B: Balanced precision/recall ─────────────────────────────────
+  # pos_weight=5 reduces false alarms at the cost of some recall.
+  # Fresh start — previous pw5 run had unstable lr/batch combination.
+  - name:         "pw5_stable"
+    gpu:          0                  # GPU 0 (shares with cvpr job, use smaller batch)
+    resume:       false
+    pos_weight:   5.0
+    lr:           0.0003             # same as A for fair comparison
+    batch_size:   200                # smaller to share GPU 0 with competing job
+    grad_clip:    0.5
+    epochs:       150
+    patience:     15
+    lstm_hidden:  64
+    embedding_dim: 32
+    gnn_hidden:   64
+    gnn_layers:   2
+    gnn_dropout:  0.2
+    lstm_dropout: 0.2
+    # Stability check: 3e-4 × 5 × (200/256) = 1.2e-3  ✓
+
+# ── Template for future experiments (uncomment and add to experiments list) ───
+#
+#  # Lower pos_weight — maximum precision, minimum false alarms
+#  - name:         "pw3_precision"
+#    gpu:          0
+#    pos_weight:   3.0
+#    lr:           0.0003
+#    batch_size:   256
+#    grad_clip:    0.5
+#    epochs:       150
+#    patience:     15
+#
+#  # Deeper model — larger LSTM and GNN
+#  - name:         "deep_model"
+#    gpu:          1
+#    pos_weight:   10.0
+#    lr:           0.0002            # lower lr for deeper model
+#    batch_size:   128               # smaller batch for larger model
+#    grad_clip:    0.3
+#    lstm_hidden:  128
+#    embedding_dim: 64
+#    gnn_hidden:   128
+#    gnn_layers:   3
+#    epochs:       200
+#    patience:     20
