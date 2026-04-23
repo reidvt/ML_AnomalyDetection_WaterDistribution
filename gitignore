@@ -1,0 +1,42 @@
+# Outputs — model checkpoints, logs, plots (too large for git)
+outputs/
+outputs/**
+
+# Keep the outputs directory stub
+!outputs/.gitkeep
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large data files
+LeakDB/
+*.parquet
+*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo

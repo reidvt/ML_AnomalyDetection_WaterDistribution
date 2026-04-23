@@ -41,13 +41,13 @@ class PipelineConfig:
     # Edit these for your machine.  Raw strings (r"...") work on both platforms.
 
     # Directory of Parquet master files produced by preprocess.py
-    data_root: str = r"C:\Users\reidv\SDX\SEM2\MergedTraining\data_master"
+    data_root: str = "/home/ailab/Desktop/LeakDB_SDX/LeakDB/processeddata"
 
     # EPANET .inp file — set to None to fall back to heuristic ring topology
-    inp_file: Optional[str] = r"C:\Users\reidv\SDX\SEM2\MergedTraining\Hanoi_CMH.inp"
+    inp_file: Optional[str] = None
 
     # Output root; subdirs (models/, embeddings/, logs/) are created automatically
-    output_dir: str = r"C:\Users\reidv\SDX\SEM2\MergedTraining\outputs"
+    output_dir: str = "/home/ailab/Desktop/LeakDB_SDX/outputs"
 
     # ── Data Windowing ────────────────────────────────────────────────────────
     window_size: int = 48           # timesteps per window

@@ -1,0 +1,4 @@
+alive
+epoch=151
+best_val_f1=0.9373
+timestamp=2026-04-16 21:57:13

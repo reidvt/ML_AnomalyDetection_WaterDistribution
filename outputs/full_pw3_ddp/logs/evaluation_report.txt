@@ -1,0 +1,27 @@
+============================================================
+  EVALUATION REPORT  —  LeakDB Leak Detection
+============================================================
+  Test windows         : 218,516
+  Decision threshold   : 0.69
+
+  ── Classification metrics ──────────────────────────────
+  Accuracy             : 0.9781
+  F1 Score             : 0.9335
+  Precision            : 0.9921
+  Recall (sensitivity) : 0.8814
+  Specificity          : 0.9985
+  NPV                  : 0.9755
+  MCC                  : 0.9227
+
+  ── Ranking metrics ────────────────────────────────────
+  ROC-AUC              : 0.9860
+  Avg Precision (AP)   : 0.9698
+
+  ── Confusion matrix counts ────────────────────────────
+  TP    33,610   FN     4,524
+  FP       266   TN   180,116
+
+  ── Threshold recommendation ───────────────────────────
+  Best F1 threshold    : 0.488
+  F1 at that threshold : 0.9373
+============================================================

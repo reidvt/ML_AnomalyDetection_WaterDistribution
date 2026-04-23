@@ -1,0 +1,5 @@
+alive
+epoch=150
+best_val_f1=0.9375
+gpus=2
+timestamp=2026-04-18 16:06:11
