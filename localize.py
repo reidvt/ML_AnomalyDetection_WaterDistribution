@@ -57,7 +57,7 @@ from torch_geometric.loader import DataLoader
 from config import PipelineConfig
 from dataset import LeakWindowDataset
 from models import SpatioTemporalLeakDetector
-from topology import TopologyBuilder
+from topology import TopologyBuilder, parse_inp_coordinates
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -142,11 +142,32 @@ def _hanoi_layout(node_names: List[str]) -> np.ndarray:
     return _circular_layout(len(node_names))
 
 
+# Module-level cache for INP coordinates — set by main() if inp_file is found
+_inp_coords: dict = {}
+
+
 def _get_layout(node_names: List[str]) -> np.ndarray:
     """
-    Dispatch to a topology-aware layout if we recognise the network;
-    fall back to circular otherwise.
+    Use real XY coordinates from the INP file if available,
+    otherwise fall back to a circular layout.
     """
+    if _inp_coords:
+        coords = []
+        for name in node_names:
+            if name in _inp_coords:
+                coords.append(_inp_coords[name])
+            else:
+                # fallback for any node missing from coords
+                coords.append((0.0, 0.0))
+        pos = np.array(coords, dtype=float)
+        # Normalise to [0, 1] range for consistent rendering
+        for dim in range(2):
+            mn, mx = pos[:, dim].min(), pos[:, dim].max()
+            if mx > mn:
+                pos[:, dim] = (pos[:, dim] - mn) / (mx - mn)
+        # Flip Y so north is up (EPANET Y increases downward)
+        pos[:, 1] = 1.0 - pos[:, 1]
+        return pos
     return _circular_layout(len(node_names))
 
 
@@ -486,7 +507,7 @@ def main() -> None:
     args = _parse_args()
 
     output_dir = os.path.abspath(os.path.expanduser(args.output_dir))
-    ckpt_path  = os.path.join(output_dir, "checkpoints", args.checkpoint)
+    ckpt_path  = os.path.join(output_dir, args.checkpoint)
     loc_dir    = os.path.join(output_dir, "logs", "localization")
     os.makedirs(loc_dir, exist_ok=True)
 
@@ -509,6 +530,15 @@ def main() -> None:
         cfg.batch_size  = args.batch_size
     if args.num_workers:
         cfg.num_workers = args.num_workers
+
+    # ── Load INP coordinates for real network layout ─────────────────────────
+    global _inp_coords
+    inp_path = args.inp_file or (cfg.inp_file if hasattr(cfg, "inp_file") else None)
+    if inp_path and os.path.exists(inp_path):
+        _inp_coords = parse_inp_coordinates(inp_path)
+        print(f"   INP coords loaded: {len(_inp_coords)//2} nodes with real XY positions")
+    else:
+        print("   No INP file — using circular layout")
 
     # ── Dataset ───────────────────────────────────────────────────────────────
     print("📂 Building dataset …")

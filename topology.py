@@ -79,10 +79,33 @@ class TopologyBuilder:
             return None
 
         # Keep only nodes that have a pressure sensor in the Parquet file
+        # Parquet columns may use "Node_X" prefix while INP uses bare "X" — normalise both
         col_node_set = {c.replace("_pressure", "") for c in pressure_cols}
-        node_names = [n for n in raw_nodes if n in col_node_set]
+
+        # Build a mapping: bare_id → col_node_name (e.g. "2" → "Node_2")
+        bare_to_col: dict = {}
+        for col_name in col_node_set:
+            bare = col_name.replace("Node_", "").strip()
+            bare_to_col[bare] = col_name
+
+        # Try direct match first, then bare-id match
+        node_names = []
+        for n in raw_nodes:
+            if n in col_node_set:
+                node_names.append(n)
+            elif n in bare_to_col:
+                node_names.append(bare_to_col[n])  # remap to "Node_X" form
+
         if not node_names:
             return None
+
+        # Remap raw_edges to use the col_node_set names (Node_X form)
+        remapped_edges = []
+        for from_n, to_n, pipe_name in raw_edges:
+            f2 = bare_to_col.get(from_n, from_n)
+            t2 = bare_to_col.get(to_n, to_n)
+            remapped_edges.append((f2, t2, pipe_name))
+        raw_edges = remapped_edges
 
         edge_index, pipe_names = _edges_to_tensor(node_names, raw_edges)
         return node_names, edge_index, pipe_names
@@ -175,6 +198,32 @@ def _parse_inp(inp_path: str) -> Tuple[List[str], List[Tuple[str, str, str]]]:
                 edges.append((from_n, to_n, name))
 
     return sorted(node_names), edges
+
+
+def parse_inp_coordinates(inp_path: str) -> dict:
+    """
+    Parse the [COORDINATES] section of an EPANET .inp file.
+    Returns dict mapping node_id -> (x, y).
+    Both bare IDs ("2") and Node_ prefixed ("Node_2") are stored.
+    """
+    coords = {}
+    in_section = False
+    with open(inp_path, "r", encoding="utf-8", errors="ignore") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line or line.startswith(";"):
+                continue
+            if line.startswith("["):
+                in_section = line.strip("[]").upper() == "COORDINATES"
+                continue
+            if in_section:
+                parts = line.split()
+                if len(parts) >= 3:
+                    node_id = parts[0]
+                    x, y = float(parts[1]), float(parts[2])
+                    coords[node_id] = (x, y)
+                    coords[f"Node_{node_id}"] = (x, y)
+    return coords
 
 
 def _edges_to_tensor(
